@@ -4,6 +4,26 @@ Open Occupation Blueprint for **ISCO-08 2412**: Financial and Investment Adviser
 
 This repository designs a forkable OSS business for an independent financial and investment advisory practice: a secure document-handling and archival robot manages client statements and disclosures under a governor-gated actor, so the practice keeps its own advisory records instead of renting a closed wealth-management SaaS.
 
+**Maturity: `:implemented`.** `src/finadvisory/` implements the
+`FinancialAdvisoryActor` as a `langgraph.graph/state-graph`
+(`finadvisory.actor`) wired to an `Advisory Advisor` (`finadvisory.advisor`)
+and an independent `FinancialAdvisoryGovernor` (`finadvisory.governor`),
+following the itonami actor pattern (ADR-2607011000): `:intake -> :advise ->
+:govern -> :decide -+-> :commit (:ok?) +-> :request-approval (:escalate?,
+human-in-the-loop interrupt) +-> :hold (:hard?)`. 14 tests / 29 assertions
+green (`clojure -M:test`). HARD invariants (always hold, never
+overridable): client provenance, no-actuation (`:effect` must be
+`:propose`), a registered account basis for any recommendation, the
+proposed allocation percentage not exceeding the account's registered
+suitability ceiling (recommending beyond the client's registered risk
+tolerance is unsuitable advice, not aggressive strategy), and a risk
+disclosure attached before any recommendation can be committed
+(undisclosed advice is not efficient service). Always-escalate ops
+(human sign-off regardless of confidence, mapping this repo's Trust
+Controls in [`docs/business-model.md`](docs/business-model.md)):
+`:approve-trade-execution` and `:approve-fund-transfer` (no trade
+execution or fund transfer without the governor gate).
+
 ## Robotics premise
 
 All cloud-itonami verticals are designed on the premise that a **robot performs

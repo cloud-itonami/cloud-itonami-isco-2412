@@ -1,0 +1,66 @@
+<html><head><meta charset="utf-8"><title>cloud-itonami-isco-2412 &middot; independent financial &amp; investment advisory</title><style>
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.ok { color: #137a3f; }
+body { font-family: system-ui,-apple-system,sans-serif; margin: 0; color: #1a1a1a; background: #fafafa; }
+header.bar { display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: #fff; border-bottom: 1px solid #e5e5e5; }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #f0f0f0; }
+h2 { margin-top: 0; font-size: 15px; }
+.warn { color: #b25c00; background: #fff8e1; padding: 2px 6px; border-radius: 4px; }
+main { max-width: 1080px; margin: 24px auto; padding: 0 20px; }
+header.bar h1 { font-size: 18px; margin: 0; font-weight: 600; }
+.muted { color: #888; font-size: 13px; }
+.critical { color: #fff; background: #b3261e; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+.card { background: #fff; border: 1px solid #e5e5e5; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.err { color: #b3261e; background: #fbe9e7; padding: 2px 6px; border-radius: 4px; }
+th { font-weight: 600; color: #555; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+header.bar .badge { margin-left: auto; font-size: 12px; color: #666; }
+code { font-size: 12px; background: #f4f4f4; padding: 1px 4px; border-radius: 3px; }
+</style></head><body>
+<header class="bar">
+  <h1>Independent Financial &amp; Investment Advisory (ISCO-08 2412) — Operator Console</h1>
+  <span class="badge">read-only sample · governor-gated · trade execution &amp; fund transfer always human-approved</span>
+</header>
+<main>
+  <section class="card">
+    <h2>Registered clients &amp; advisory accounts</h2>
+    <p class="muted">Demo snapshot — build-time-generated from <code>finadvisory.store</code> via <code>finadvisory.render-html</code> (<code>clojure -M:render-html</code>), regenerated nightly. Committed-record count is a live re-read of <code>store/records-of</code> after the real graph ran — never a remembered number.</p>
+    <table>
+      <thead><tr><th>Client</th><th>Name</th><th>Account</th><th>Account name</th><th>Suitability ceiling</th><th>Committed records</th><th>Last op status</th></tr></thead>
+      <tbody>
+        <tr><td>client-1</td><td>Kobo Advisory</td><td><code>A-1</code></td><td>account-042</td><td>25%</td><td>3</td><td><span class="critical">HARD hold &middot; account-wrong-client</span></td></tr>
+        <tr><td>client-2</td><td>Meridian Capital</td><td><code>A-2</code></td><td>account-099</td><td>40%</td><td>1</td><td><span class="ok">committed</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Action gate (Financial Advisory Governor)</h2>
+    <p class="muted">HARD holds cannot be overridden. The suitability ceiling and risk-disclosure attachment are rechecked against the registered account record on every proposal, at any confidence. The governor never dispatches hardware itself, never executes a trade and never transfers funds.</p>
+    <table>
+      <thead><tr><th>Op</th><th>Gate</th></tr></thead>
+      <tbody>
+        <tr><td><code>:approve-recommendation</code></td><td><span class="ok">auto-commit when the allocation is within the account's suitability ceiling AND a risk disclosure is attached &middot; HARD hold otherwise</span></td></tr>
+        <tr><td><code>:approve-trade-execution</code></td><td><span class="warn">ALWAYS human approval &middot; no trade execution without the governor gate, regardless of confidence</span></td></tr>
+        <tr><td><code>:approve-fund-transfer</code></td><td><span class="warn">ALWAYS human approval &middot; no fund transfer without the governor gate, regardless of confidence</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Audit trail (this run)</h2>
+    <p class="muted">Every request this scenario drove through the real compiled graph, in order — thread-id, client, op, the request's own account/allocation, and the real disposition (auto-commit, approved-after-escalation, or the specific HARD-hold rule).</p>
+    <table>
+      <thead><tr><th>Thread</th><th>Client</th><th>Op</th><th>Account</th><th>Allocation %</th><th>Disposition</th></tr></thead>
+      <tbody>
+        <tr><td><code>c1-recommend-ok</code></td><td>client-1</td><td><code>approve-recommendation</code></td><td>A-1</td><td>15</td><td><span class="ok">committed</span></td></tr>
+        <tr><td><code>c1-over-ceiling</code></td><td>client-1</td><td><code>approve-recommendation</code></td><td>A-1</td><td>60</td><td><span class="critical">HARD hold &middot; allocation-exceeds-suitability-ceiling</span></td></tr>
+        <tr><td><code>c1-missing-disclosure</code></td><td>client-1</td><td><code>approve-recommendation</code></td><td>A-1</td><td>15</td><td><span class="critical">HARD hold &middot; missing-risk-disclosure</span></td></tr>
+        <tr><td><code>c1-unknown-account</code></td><td>client-1</td><td><code>approve-recommendation</code></td><td>A-ghost</td><td>15</td><td><span class="critical">HARD hold &middot; unknown-account</span></td></tr>
+        <tr><td><code>ghost-no-client</code></td><td>client-ghost</td><td><code>approve-recommendation</code></td><td>A-1</td><td>15</td><td><span class="critical">HARD hold &middot; no-client</span></td></tr>
+        <tr><td><code>c1-trade-execution</code></td><td>client-1</td><td><code>approve-trade-execution</code></td><td>A-1</td><td></td><td><span class="ok">approved &amp; committed</span></td></tr>
+        <tr><td><code>c1-fund-transfer</code></td><td>client-1</td><td><code>approve-fund-transfer</code></td><td>A-1</td><td></td><td><span class="ok">approved &amp; committed</span></td></tr>
+        <tr><td><code>c1-wrong-account</code></td><td>client-1</td><td><code>approve-recommendation</code></td><td>A-2</td><td>20</td><td><span class="critical">HARD hold &middot; account-wrong-client</span></td></tr>
+        <tr><td><code>c2-recommend-ok</code></td><td>client-2</td><td><code>approve-recommendation</code></td><td>A-2</td><td>30</td><td><span class="ok">committed</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+</body></html>

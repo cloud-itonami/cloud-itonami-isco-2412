@@ -53,3 +53,24 @@
   ([] (mem-store {}))
   ([seed] (->MemStore (atom (merge {:clients {} :accounts {} :records [] :ledger []}
                                    seed)))))
+
+(defn demo-data
+  "The deterministic demo corpus behind `seed-db`. Two clients with
+  different registered suitability ceilings, so the ceiling invariant in
+  `finadvisory.governor` is demonstrable from the seed alone rather than
+  only from a hand-built fixture."
+  []
+  {:clients  {"client-1" {:client-id "client-1" :name "Kobo Advisory"}
+              "client-2" {:client-id "client-2" :name "Meridian Capital"}}
+   :accounts {"A-1" {:account-id "A-1" :client-id "client-1"
+                     :name "account-042" :max-allocation-pct 25}
+              "A-2" {:account-id "A-2" :client-id "client-2"
+                     :name "account-118" :max-allocation-pct 10}}
+   :records  []
+   :ledger   []})
+
+(defn seed-db
+  "A MemStore seeded with the demo corpus -- the deterministic default
+  the 営み OS hydrates a fresh tenant from."
+  []
+  (mem-store (demo-data)))

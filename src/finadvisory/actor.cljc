@@ -1,93 +1,40 @@
 (ns finadvisory.actor
-  "FinancialAdvisoryActor — the ISCO-08 2412 community finadvisory actor as a
-  `langgraph.graph/state-graph` (ADR-2607011000 / CLAUDE.md Actors
-  section). One graph run = one finadvisory operation request
-  (intake → advise → govern → decide → commit/hold, with a
-  human-approval interrupt for escalated proposals). No infinite
-  internal loop; checkpointed per superstep so an interrupted run can
-  resume after human sign-off. Modeled on cloud-itonami-isco-2411's
-  accounting.actor.
+  "FinancialAdvisoryActor -- the named entry point for the ISCO-08 2412
+  community financial-advisory actor (ADR-2607011000 / CLAUDE.md Actors
+  section). One call = one financial-advisory operation request
+  (intake -> advise -> govern -> decide -> commit/hold, with a
+  human-approval interrupt for escalated proposals).
 
-  ```text
-  :intake -> :advise -> :govern -> :decide -+-> :commit            (:ok? true)
-                                             +-> :request-approval   (:escalate? true, interrupt-before)
-                                             +-> :hold               (:hard? true)
-  ```
+  ## This namespace no longer compiles a graph
 
-  The unconditional invariant: the FinancialAdvisoryAdvisor can never
-  directly commit a record the FinancialAdvisoryGovernor refuses —
-  every commit-record! call is gated behind `:decide`."
+  The graph moved to `finadvisory.operation`, which is the shape the
+  営み OS's standard adapter drives (`operation/build` + `phase/read-ops`
+  + `phase/write-ops` + `store/seed-db` + a governor). This namespace
+  stays because it is the name this repo's tests and
+  `finadvisory.render-html` call, and because the run/approve/reject
+  helpers belong somewhere -- but it delegates rather than defining a
+  second graph. Two graph definitions in one repo drift, and nothing in
+  the output says which one ran.
+
+  The unconditional invariant is unchanged: the advisor can never
+  directly commit a record the governor refuses -- every
+  `commit-record!` call is behind `:decide`, and the rollout phase gate
+  (`finadvisory.phase`) can only add caution on top."
   (:require [langgraph.graph :as g]
-            [langgraph.checkpoint :as cp]
-            [finadvisory.advisor :as advisor]
-            [finadvisory.governor :as governor]
-            [finadvisory.store :as store]))
+            [finadvisory.operation :as operation]))
 
 (defn build-graph
   "Build a compiled FinancialAdvisoryActor graph. `store` implements
   `finadvisory.store/Store`. `advisor` implements
   `finadvisory.advisor/Advisor` (defaults to `mock-advisor`).
-  `checkpointer` defaults to an in-memory one."
-  [{:keys [store advisor checkpointer]
-    :or {advisor (advisor/mock-advisor)
-         checkpointer (cp/mem-checkpointer)}}]
-  (-> (g/state-graph
-       {:channels
-        {:request     {:default nil}
-         :context     {:default nil}
-         :proposal    {:default nil}
-         :verdict     {:default nil}
-         :disposition {:default nil}
-         :record      {:default nil}
-         :audit       {:reducer into :default []}}})
-      (g/add-node :intake (fn [s] s))
-      (g/add-node :advise
-                   (fn [{:keys [request]}]
-                     (let [p (advisor/-advise advisor store request)]
-                       {:proposal p
-                        :audit [{:node :advise :request request :proposal p}]})))
-      (g/add-node :govern
-                   (fn [{:keys [request context proposal]}]
-                     (let [v (governor/check request context proposal store)]
-                       {:verdict v
-                        :audit [{:node :govern :verdict v}]})))
-      (g/add-node :decide
-                   (fn [{:keys [verdict]}]
-                     {:disposition (cond
-                                     (:hard? verdict) :hold
-                                     (:escalate? verdict) :request-approval
-                                     :else :commit)}))
-      (g/add-node :request-approval (fn [s] s))
-      (g/add-node :commit
-                   (fn [{:keys [request proposal]}]
-                     (let [record {:client-id (:client-id request)
-                                    :op (:op proposal)
-                                    :account-id (:account-id proposal)
-                                    :payload proposal}]
-                       (store/commit-record! store record)
-                       (store/append-ledger! store {:disposition :commit :record record})
-                       {:record record
-                        :audit [{:node :commit :record record}]})))
-      (g/add-node :hold
-                   (fn [{:keys [verdict]}]
-                     (store/append-ledger! store {:disposition :hold :verdict verdict})
-                     {:audit [{:node :hold :verdict verdict}]}))
-      (g/set-entry-point :intake)
-      (g/add-edge :intake :advise)
-      (g/add-edge :advise :govern)
-      (g/add-edge :govern :decide)
-      (g/add-conditional-edges
-       :decide
-       (fn [{:keys [disposition]}]
-         (case disposition
-           :commit :commit
-           :request-approval :request-approval
-           :hold)))
-      (g/add-edge :request-approval :commit)
-      (g/set-finish-point :commit)
-      (g/set-finish-point :hold)
-      (g/compile-graph {:checkpointer checkpointer
-                         :interrupt-before #{:request-approval}})))
+  `checkpointer` defaults to an in-memory one.
+
+  Keyword-map arity kept for existing callers; `finadvisory.operation/
+  build` is the positional form the OS adapter uses."
+  [{:keys [store advisor checkpointer]}]
+  (operation/build store (cond-> {}
+                           advisor      (assoc :advisor advisor)
+                           checkpointer (assoc :checkpointer checkpointer))))
 
 (defn run-request!
   "Run one operation request to completion or interrupt. `thread-id`
@@ -96,8 +43,20 @@
   (g/run* graph {:request request :context context} {:thread-id thread-id}))
 
 (defn approve!
-  "Human-in-the-loop resume: the interrupted `:request-approval` node
-  advances straight to `:commit` on resume (approval is the act of
-  resuming the thread)."
-  [graph thread-id]
-  (g/run* graph nil {:thread-id thread-id :resume? true}))
+  "Human-in-the-loop resume with an explicit approval. Resuming is no
+  longer implicitly an approval: the `:request-approval` node commits
+  only on `{:status :approved}`, so the OS adapter's `-resume`, which
+  passes the human's real decision through, can also reject."
+  ([graph thread-id] (approve! graph thread-id nil))
+  ([graph thread-id by]
+   (g/run* graph {:approval (cond-> {:status :approved} by (assoc :by by))}
+           {:thread-id thread-id :resume? true})))
+
+(defn reject!
+  "Human-in-the-loop resume with a rejection. The interrupted run
+  proceeds to `:hold`; the SSoT is not written and the refusal is
+  appended to the audit ledger."
+  ([graph thread-id] (reject! graph thread-id nil))
+  ([graph thread-id by]
+   (g/run* graph {:approval (cond-> {:status :rejected} by (assoc :by by))}
+           {:thread-id thread-id :resume? true})))

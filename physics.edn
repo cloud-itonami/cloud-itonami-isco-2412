@@ -1,0 +1,44 @@
+;; What this vertical's robot physically does, declared for
+;; kotoba.robotics.process (kotoba-lang/robotics). `kbb -M:physics` runs it.
+;;
+;; README "Robotics premise": a secure document-handling and archival robot
+;; performs statement printing, disclosure packet assembly and physical
+;; archival (ISCO 2412, financial and investment advisers). Its physical
+;; work: carrying printed client statements on a cart to the packet table,
+;; placing assembled disclosure packets into archive boxes, and keeping the
+;; signed originals in a fire-resistive records cabinet.
+;;
+;; Every number without a cited source is marked `estimate` in its :basis.
+;; Replacing an estimate with a sourced value is this bot's growth work.
+{:physics/schema "itonami.physical-ai.spec.v1"
+ :repo "cloud-itonami/cloud-itonami-isco-2412"
+ :cases
+ [{:id :statement-cart-run
+   :kind :transport
+   :procedure "AMR carries a cart of freshly printed client statements from the print room to the packet-assembly table"
+   :params {:mass-kg 35.0 :payload-kg 30.0 :v-max-mps 1.0 :a-max-mps2 0.5
+            :brake-decel-mps2 0.7 :drive-force-n 80.0 :crr 0.02
+            :cog-height-m 0.60 :support-half-length-m 0.25}
+   :sweep {:param :distance-m :values [10.0 20.0 30.0 45.0 60.0]}
+   :quantity :cycle-time-s
+   :limit {:max 40.0 :basis "estimate: statements must reach the packet table within 40 s so the printer output tray never overflows during a mailing run"}
+   :boundary {:lo 2.0 :hi 150.0}}
+  {:id :packet-into-archive-box
+   :kind :manipulator
+   :procedure "arm places an assembled disclosure packet into an archive box on the lower shelf"
+   :params {:l1-m 0.45 :l2-m 0.40 :m1-kg 3.5 :m2-kg 2.5
+            :from [0.40 0.30] :to [0.60 -0.25] :duration-s 1.5 :steps 500}
+   :sweep {:param :payload-kg :values [0.2 0.5 1.0 2.0 3.0]}
+   :quantity :peak-tau1-nm
+   :limit {:max 60.0 :basis "estimate: continuous shoulder torque of a light collaborative arm (~5 kg class)"}
+   :boundary {:lo 0.1 :hi 30.0}}
+  {:id :fire-rated-records-cabinet
+   :kind :thermal
+   :procedure "one-hour building fire acts on the insulated wall of the records cabinet holding signed originals"
+   :params {:conductivity-w-mk 0.20 :density-kg-m3 900.0 :specific-heat-j-kgk 1000.0
+            :t0-c 20.0 :t-hot-c 927.0 :h-front-w-m2k 50.0 :t-back-ambient-c 20.0 :h-back-w-m2k 5.0
+            :threshold-c 177.0 :duration-s 3600.0 :nodes 21}
+   :sweep {:param :thickness-m :values [0.02 0.03 0.04 0.06 0.08]}
+   :quantity :final-back-c
+   :limit {:max 177.0 :basis "UL 72 Class 350 (paper records): interior must not exceed 350 F (177 C) during the rated exposure; 927 C is the ASTM E119 furnace temperature at 60 min, held constant here (estimate: constant exposure and insulation properties)"}
+   :boundary {:lo 0.01 :hi 0.12}}]}
